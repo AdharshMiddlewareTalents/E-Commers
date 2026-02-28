@@ -1,6 +1,7 @@
 package com.ecommers.product_service.service;
 
 import com.ecommers.product_service.Exception.BadRequestException;
+import com.ecommers.product_service.Exception.DublicateResourceException;
 import com.ecommers.product_service.Exception.ResourceNotFoundException;
 import com.ecommers.product_service.dto.CreateProductRequest;
 import com.ecommers.product_service.dto.ProductResponse;
@@ -61,7 +62,7 @@ public class ProductService {
         log.info("Generated slug:{}",slug);
 
         if(productRepository.findBySlugAndActiveTrue(slug).isPresent()){
-            throw new ResourceNotFoundException("Product already exists");
+            throw new DublicateResourceException("Product already exists");
         }
 
         log.info("Setting product status: {}", ProductStatus.ACTIVE);

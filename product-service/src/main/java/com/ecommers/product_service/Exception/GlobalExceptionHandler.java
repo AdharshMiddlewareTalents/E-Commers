@@ -37,6 +37,13 @@ public class GlobalExceptionHandler {
         return buildResponse(ex, HttpStatus.FORBIDDEN, request);
     }
 
+    public ResponseEntity<ErrorResponse> handleDublicate(
+            DublicateResourceException ex,
+            HttpServletRequest request
+    ){
+        return  buildResponse(ex,HttpStatus.CONFLICT,request);
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleGenericException(
             Exception ex,
