@@ -1,0 +1,45 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: AUTH-SERVICE
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      timeout: 60000
+
+
+  datasource:
+    url: jdbc:mysql://localhost:3306/auth-db
+    username: root
+    password: tiger
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+
+  mail:
+    host: smtp.gmail.com
+    port : 587
+    username: adarshtarikeri@gmail.com
+    password: bbpb tkbr kcsd dexi
+    properties:
+      mail.smtp.auth: true
+      mail.smtp.starttls.enable: true
+
+jwt:
+  access-secret: C7K4w+RBnJfIr1TZgb/JUWMiASrTq4cIWxkpExNtwxFYIfENDMUOY+RxRZKe4P8Yv7ky6+98bZYP1k6ot5lr5A==
+  refresh-secret: +m8gp15l+BSkSjiPHI6qmccMlbtr3QgqeuttxY4nA0e4g122H3FKWwgd2glkNqO1vkfcKkU8qNiLfwjVn/twIw==
+  access-expiration: 900000      # 15 minutes
+  refresh-expiration: 604800000  # 7 days
+
+eureka:
+  client:
+    service-url:
+      default-zone: http://localhost:8761/eureka/
+
+  instance:
+    prefer-ip-address: true

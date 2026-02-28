@@ -1,0 +1,43 @@
+server:
+  port: 8082
+
+
+jwt:
+  access-secret: C7K4w+RBnJfIr1TZgb/JUWMiASrTq4cIWxkpExNtwxFYIfENDMUOY+RxRZKe4P8Yv7ky6+98bZYP1k6ot5lr5A==
+
+
+spring:
+  application:
+    name: product-service
+
+  cache:
+    type: redis
+
+  data:
+    redis:
+      host: localhost
+      port: 6379
+
+
+
+  datasource:
+    url: jdbc:mysql://localhost:3306/product
+    username: root
+    password: tiger
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+
+eureka:
+  instance:
+    prefer-ip-address: true
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka
+
+
+file:
+  upload-dir: uploads/
+

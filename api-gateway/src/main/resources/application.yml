@@ -1,0 +1,35 @@
+server:
+  port: 8080
+
+
+jwt:
+  access-secret: C7K4w+RBnJfIr1TZgb/JUWMiASrTq4cIWxkpExNtwxFYIfENDMUOY+RxRZKe4P8Yv7ky6+98bZYP1k6ot5lr5A==
+
+
+spring:
+  application:
+    name: API-GATEWAY
+
+  cloud:
+    gateway:
+      routes:
+        - id: auth-service
+          uri: lb://AUTH-SERVICE
+          predicates:
+            - Path=/auth/**
+
+        - id: product-service
+          uri: lb://PRODUCT-SERVICE
+          predicates:
+            - Path=/products/**
+
+
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka/
+
+logging:
+  level:
+    org.springframework.cloud.gateway: DEBUG
