@@ -3,6 +3,7 @@ package com.ecommers.auth_service.service;
 import com.ecommers.auth_service.dto.AuthResponse;
 import com.ecommers.auth_service.dto.LoginRequest;
 import com.ecommers.auth_service.dto.RegisterRequest;
+import com.ecommers.auth_service.dto.ResetPasswordRequest;
 import com.ecommers.auth_service.entity.AccountStatus;
 import com.ecommers.auth_service.entity.RefreshToken;
 import com.ecommers.auth_service.entity.Role;
@@ -10,20 +11,23 @@ import com.ecommers.auth_service.entity.User;
 import com.ecommers.auth_service.exception.*;
 import com.ecommers.auth_service.repsoitory.RefreshTokenRepository;
 import com.ecommers.auth_service.repsoitory.UserRepository;
-import com.ecommers.auth_service.security.EmailService;
-import com.ecommers.auth_service.security.JwtUtil;
-import com.ecommers.auth_service.security.OtpUtil;
-import com.ecommers.auth_service.security.RedisSecurityService;
+import com.ecommers.auth_service.security.*;
+import jakarta.servlet.http.Cookie;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import jakarta.ws.rs.BadRequestException;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.LoggerFactory;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+
 import java.time.LocalDateTime;
 import java.util.Optional;
 
@@ -45,6 +49,7 @@ public class AuthService {
     private final RefreshTokenRepository refreshTokenRepository;
     private static final Logger log =
             LoggerFactory.getLogger(AuthService.class);
+
 
     // ========================= REGISTER =========================
 
@@ -153,7 +158,7 @@ public class AuthService {
 
     // ========================= LOGIN =========================
 
-    public AuthResponse login(LoginRequest request) {
+    public void login(LoginRequest request,HttpServletResponse response) {
 
         log.info("Login attempts for email: {}",request.getEmail());
 
@@ -225,14 +230,31 @@ public class AuthService {
 
         refreshTokenRepository.save(refreshtokenEntity);
 
+        log.info("Storing tokens in cookies");
+
+        addCookie(response,"accessToken",accessToken,15*60);
+        addCookie(response,"refreshToken",refreshToken,7*24*60*60);
+
         log.info("Login completed successfully for: {}",
                 user.getEmail());
 
-        return new AuthResponse(accessToken,refreshToken);
 
-//        String token = jwtUtil.generateToken(userDetails);
 
-//        return new AuthResponse(token);
+    }
+
+    private void addCookie(HttpServletResponse response,
+                           String name,
+                           String value,
+                           int maxAge) {
+
+        Cookie cookie = new Cookie(name, value);
+
+        cookie.setHttpOnly(true);
+        cookie.setSecure(true); // set false for localhost if needed
+        cookie.setPath("/");
+        cookie.setMaxAge(maxAge);
+
+        response.addCookie(cookie);
     }
 
     public AuthResponse refreshToken(String refreshToken){
@@ -282,29 +304,136 @@ public class AuthService {
 
         log.info("Refresh token rotation successful for user: {}", user.getEmail());
 
-        return new AuthResponse(newAccessToken, newRefreshToken);
+        return new AuthResponse(
+                "Token Refreshed",
+                user.getEmail(),
+                user.getRole().name()
+        );
 
-
-
-//        String email =
-//                jwtUtil.extractUsernameFromRefresh(refreshToken);
-//
-//        log.warn("Refresh token expired for user: {}",
-//                storedToken.getUser().getEmail());
-//
-//        UserDetails userDetails =
-//                customerUserDetailService.loadUserByUsername(email);
-//
-//        String newAccessToken =
-//                jwtUtil.generateAccessToken(userDetails);
-//
-//        return new AuthResponse(newAccessToken,refreshToken);
     }
 
-    public void logout(String refreshToken){
+    public void logout(HttpServletRequest request,HttpServletResponse response){
         log.info("Logout request received");
-        refreshTokenRepository.findByToken(refreshToken)
-                .ifPresent(refreshTokenRepository::delete);
+
+        String refreshToken = null;
+
+        if(request.getCookies()!= null){
+            for (Cookie cookie: request.getCookies()){
+                if(cookie.getName().equals("refreshToken")){
+                    refreshToken= cookie.getValue();
+                }
+            }
+        }
+
+        if(refreshToken!=null){
+            refreshTokenRepository.findByToken(refreshToken)
+                    .ifPresent(refreshTokenRepository::delete);
+        }
+
+        clearCookies(response,"accessToken");
+        clearCookies(response,"refreshToken");
+
+        log.info("Cookies cleared successfully");
     }
+
+
+    private void clearCookies(HttpServletResponse response,String name){
+        Cookie cookie = new Cookie(name,null);
+
+        cookie.setHttpOnly(true);
+        cookie.setSecure(true);
+        cookie.setPath("/");
+        cookie.setMaxAge(0);
+
+        response.addCookie(cookie);
+    }
+
+
+    public AuthResponse getProfile(){
+        Authentication authentication =
+                SecurityContextHolder.getContext().getAuthentication();
+
+        if(authentication == null || !authentication.isAuthenticated()){
+            throw new BadRequestException("User not authenticated");
+        }
+
+        String email = authentication.getName();
+
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(()->new ResourceNotFoundException("user not found"));
+
+        return  new AuthResponse(
+                "Profile fetch successfully",
+                user.getEmail(),
+                user.getRole().name()
+        );
+
+    }
+
+    public String forgotPassword(String email){
+        log.info("Forgot password request for email: {}",email);
+
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(()->
+                        new ResourceNotFoundException("User not found"));
+
+        redisOtpService.checkResendThrottle(email);
+
+        String otp = otpUtil.generateOtp();
+
+        redisOtpService.saveOtp("reset: "+ email, otp);
+
+        emailService.sendOtp(email,otp);
+
+        return "Password reset OTP set to your email";
+    }
+
+
+    public String verifyResendOtp(String email, String otp){
+
+        log.info("Password reset OTP verification for email: {}", email);
+
+        String storedOtp = redisOtpService.getOtp("reset: "+email);
+
+        if (storedOtp == null){
+            throw new OtpException("OTP expired");
+        }
+
+        if(!storedOtp.equals(otp)){
+            throw new OtpException("Invalid OTP");
+        }
+
+        return "Otp Verified successfully";
+
+
+    }
+
+    public String resetPassword(ResetPasswordRequest request){
+        log.info("Reset password request for email: {}", request.getEmail());
+        String storedOtp = redisOtpService.getOtp("reset:"+ request.getEmail());
+
+        if(storedOtp == null){
+            throw new OtpException("OTP expired");
+        }
+
+        if(!storedOtp.equals(request.getOtp())){
+            throw new OtpException("Invalid OTP");
+        }
+
+        User user = userRepository.findByEmail(request.getEmail())
+                .orElseThrow(()-> new ResourceNotFoundException("User not found"));
+
+        user.setPassword(passwordEncoder.encode(request.getNewPassword()));
+
+        userRepository.save(user);
+
+        redisOtpService.deleteOtp("reset:"+request.getEmail());
+
+        log.info("Password reset successfully for {}",request.getEmail());
+
+        return "Password updated successfully";
+    }
+
+
 
 }

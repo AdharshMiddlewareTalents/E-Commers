@@ -233,35 +233,35 @@ public class ProductService {
     }
 
 
-    private String saveImage(MultipartFile file)
-            throws IOException {
-
-        if (file == null || file.isEmpty()) return null;
-
-        File directory = new File(uploadDir);
-        if (!directory.exists()) directory.mkdirs();
-
-        String fileName =
-                UUID.randomUUID() + ".png";
-
-        Path path = Paths.get(uploadDir + fileName);
-        Files.write(path, file.getBytes());
-
-        return "/images/" + fileName;
-    }
-
-    private void validateImage(MultipartFile file){
-
-        if(file == null || file.isEmpty()) return;
-
-        if(!file.getContentType().startsWith("image/")){
-            throw new BadRequestException("Inavlide file type");
-        }
-
-        if(file.getSize()>5*1024*1024){
-            throw new BadRequestException("File is to large");
-        }
-    }
+//    private String saveImage(MultipartFile file)
+//            throws IOException {
+//
+//        if (file == null || file.isEmpty()) return null;
+//
+//        File directory = new File(uploadDir);
+//        if (!directory.exists()) directory.mkdirs();
+//
+//        String fileName =
+//                UUID.randomUUID() + ".png";
+//
+//        Path path = Paths.get(uploadDir + fileName);
+//        Files.write(path, file.getBytes());
+//
+//        return "/images/" + fileName;
+//    }
+//
+//    private void validateImage(MultipartFile file){
+//
+//        if(file == null || file.isEmpty()) return;
+//
+//        if(!file.getContentType().startsWith("image/")){
+//            throw new BadRequestException("Inavlide file type");
+//        }
+//
+//        if(file.getSize()>5*1024*1024){
+//            throw new BadRequestException("File is to large");
+//        }
+//    }
 
     private String generateUniqueSlug(String name) {
 

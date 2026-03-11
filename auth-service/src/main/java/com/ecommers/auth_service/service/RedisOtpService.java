@@ -2,12 +2,14 @@ package com.ecommers.auth_service.service;
 
 import com.ecommers.auth_service.exception.OtpException;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
 
 @Service
+@Slf4j
 @RequiredArgsConstructor
 public class RedisOtpService {
 
@@ -20,8 +22,7 @@ public class RedisOtpService {
 
         String key = "otp:"+email.trim().toLowerCase();
 
-        System.out.println("Saving OTP to Redis with key: " + key);
-        System.out.println("OTP value: " + otp);
+        log.info("saving Otp to Redis with key: {} ",key);
 
         redisTemplate.opsForValue()
                 .set(key,otp, Duration.ofMinutes(OTP_EXPIRY_MiNUTES));

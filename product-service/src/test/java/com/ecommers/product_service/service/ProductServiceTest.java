@@ -24,6 +24,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 
 import java.io.IOException;
+import java.lang.reflect.Method;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Optional;
@@ -44,6 +45,7 @@ class ProductServiceTest {
 
     private Product product;
 
+
     @BeforeEach
     void setUp(){
         product = Product.builder()
@@ -53,6 +55,7 @@ class ProductServiceTest {
                 .description("gaming laptop")
                 .price(new BigDecimal(50000))
                 .stock(10)
+                .category("Electronics")
                 .status(ProductStatus.ACTIVE)
                 .createdAt(LocalDateTime.now())
                 .updatedAt(LocalDateTime.now())
@@ -114,6 +117,22 @@ class ProductServiceTest {
     }
 
     @Test
+    void getProductById_shouldThrowResorceNotFoundExcetption_ifNotFound(){
+
+        when(productRepository.findById(1L))
+                .thenReturn(Optional.empty());
+
+        ResourceNotFoundException exception =
+                assertThrows(ResourceNotFoundException.class,
+                        ()-> productService.getProudutById(1L));
+
+        assertEquals("Product not found",exception.getMessage());
+
+        verify(productRepository).findById(1L);
+
+    }
+
+    @Test
     void update_ShouldUpdateProduct(){
         UpdateProductRequest request = new UpdateProductRequest();
         request.setName("Update Laptop");
@@ -127,15 +146,65 @@ class ProductServiceTest {
         assertEquals("Update Laptop",response.getName());
     }
 
-//    void update_ShouldThrowException_WhenProductNotFound(){
-//        when(productRepository.findById(1L)).thenReturn(Optional.empty());
-//
-//        UpdateProductRequest request = new UpdateProductRequest();
-//
-//        assertThrows(ResourceNotFoundException.class,
-//                ()->productService.update())
-//
-//    }
+    @Test
+    void update_ShouldThrowException_WhenProductNotFound(){
+        when(productRepository.findById(1L)).thenReturn(Optional.empty());
+        UpdateProductRequest request = new UpdateProductRequest();
+
+        assertThrows(ResourceNotFoundException.class,
+                ()->productService.update(1L,request,"admin@test.com"));
+        verify(productRepository,never()).save(any());
+
+    }
+
+
+    @Test
+    void update_shouldNotChangeSlug_WhenNameIsNull(){
+        UpdateProductRequest request = new UpdateProductRequest();
+        request.setDescription("Only Description Updated");
+        when(productRepository.findById(1L))
+                .thenReturn(Optional.of(product));
+        productService.update(1L,request,"admin@test.com");
+        assertEquals("laptop",product.getSlug());
+    }
+
+
+    @Test
+    void update_shouldNotChangeDescription_WhenDescriptionIsNull(){
+        UpdateProductRequest request = new UpdateProductRequest();
+        request.setName("new name");
+        when((productRepository.findById(1L)))
+                .thenReturn(Optional.of(product));
+        productService.update(1L,request,"admin@test.com");
+        assertEquals("gaming laptop",product.getDescription());
+    }
+
+
+    @Test
+    void update_shouldNotChangePrice_WhenPriceIsNull(){
+        UpdateProductRequest request = new UpdateProductRequest();
+        request.setName("new name");
+        when(productRepository.findById(1L))
+                .thenReturn(Optional.of(product));
+        productService.update(1L,request,"admin@test.com");
+        assertEquals(BigDecimal.valueOf(50000),product.getPrice());
+    }
+
+
+    @Test
+    void update_shouldNotChangeCategory_whenCategoryIsNull() {
+
+        UpdateProductRequest request = new UpdateProductRequest();
+        request.setName("New Name");
+
+        when(productRepository.findById(1L))
+                .thenReturn(Optional.of(product));
+        productService.update(1L, request, "admin@test.com");
+
+        assertEquals("Electronics", product.getCategory());
+    }
+
+
 
 
     @Test
@@ -146,6 +215,20 @@ class ProductServiceTest {
         assertFalse(product.isActive());
         assertEquals(ProductStatus.ARCHIVED,product.getStatus());
         verify(productRepository).save(product);
+    }
+
+    @Test
+    void delete_shouldThrowException_ifProductNotFound(){
+        when(productRepository.findById(1L))
+                .thenReturn(Optional.empty());
+        ResourceNotFoundException exception =
+                assertThrows(ResourceNotFoundException.class,
+                        ()-> productService.delete(1L,"admin@test.com"));
+
+        assertEquals("Product not found",exception.getMessage());
+
+        verify(productRepository).findById(1L);
+        verify(productRepository,never()).save(any());
     }
 
 
@@ -160,9 +243,43 @@ class ProductServiceTest {
     @Test
     void reduceStock_shouldThrowException_WhenInsufficient(){
         when(productRepository.findById(1L)).thenReturn(Optional.of(product));
+        BadRequestException exception =
         assertThrows(BadRequestException.class,
                 ()-> productService.reduceStock(1L,50));
+        assertEquals("insufficient stock",exception.getMessage());
+
+        verify(productRepository).findById(1L);
+        verify(productRepository,never()).save(any());
     }
+
+    @Test
+    void reduceStock_shouldThrowException_whenProductNotFound(){
+        when(productRepository.findById(1L))
+                .thenReturn(Optional.empty());
+        ResourceNotFoundException exception =
+                assertThrows(ResourceNotFoundException.class,
+                        ()->productService.reduceStock(1L,50));
+
+        assertEquals("product not found",exception.getMessage());
+
+        verify(productRepository).findById(1L);
+        verify(productRepository,never()).save(any());
+    }
+
+
+    @Test
+    void reduceStock_shouldSetOutOfStock_whenStocksBecomesZero(){
+
+        when(productRepository.findById(1L)).thenReturn(Optional.of(product));
+        productService.reduceStock(1L,10);
+        assertEquals(0,product.getStock());
+        assertEquals(ProductStatus.OUT_OF_STOCK,product.getStatus());
+
+        verify(productRepository).save(product);
+
+    }
+
+
 
 
     @Test
@@ -179,6 +296,97 @@ class ProductServiceTest {
         assertEquals(1,responses.getTotalElements());
     }
 
+    @Test
+    void getAll_shouldSearchByKeyword_whenKeywordIsPresent(){
+
+        Pageable pageable = PageRequest.of(0,10);
+        Page<Product> productPage =
+                new PageImpl<>(List.of(product));
+
+        when(productRepository
+                .findByNameContainingIgnoreCaseAndActiveTrue(
+                        eq("laptop"),any(Pageable.class)
+                )).thenReturn(productPage);
+
+        Page<ProductResponse> responses =
+                productService.getALl("laptop",pageable);
+
+        assertEquals(1L,responses.getTotalElements());
+
+        verify(productRepository)
+                .findByNameContainingIgnoreCaseAndActiveTrue(
+                        eq("laptop"),any(Pageable.class)
+                );
+
+        verify(productRepository,never())
+                .findByActiveTrue(any());
+
+    }
+
+
+    @Test
+    void getAll_shouldCallFindByActiveTrue_whenKeywordIsNull() {
+
+        Pageable pageable = PageRequest.of(0, 10);
+
+        Page<Product> productPage =
+                new PageImpl<>(List.of(new Product()));
+
+        when(productRepository.findByActiveTrue(any(Pageable.class)))
+                .thenReturn(productPage);
+
+        Page<ProductResponse> response =
+                productService.getALl(null, pageable);
+
+        assertEquals(1, response.getTotalElements());
+
+        verify(productRepository)
+                .findByActiveTrue(any(Pageable.class));
+
+        verify(productRepository, never())
+                .findByNameContainingIgnoreCaseAndActiveTrue(
+                        anyString(), any());
+    }
+
+    @Test
+    void getAll_shouldCallFindByActiveTrue_whenKeywordIsEmpty() {
+
+        Pageable pageable = PageRequest.of(0, 10);
+
+        Page<Product> productPage =
+                new PageImpl<>(List.of(new Product()));
+
+        when(productRepository.findByActiveTrue(any(Pageable.class)))
+                .thenReturn(productPage);
+
+        Page<ProductResponse> response =
+                productService.getALl("", pageable);
+
+        assertEquals(1, response.getTotalElements());
+
+        verify(productRepository)
+                .findByActiveTrue(any(Pageable.class));
+
+        verify(productRepository, never())
+                .findByNameContainingIgnoreCaseAndActiveTrue(
+                        anyString(), any());
+    }
+
+    @Test
+    void getAll_shouldLimitPageSizeTo50() {
+
+        Pageable pageable = PageRequest.of(0, 100); // more than 50
+
+        when(productRepository.findByActiveTrue(any(Pageable.class)))
+                .thenAnswer(invocation -> {
+                    Pageable passedPageable = invocation.getArgument(0);
+                    assertEquals(50, passedPageable.getPageSize());
+                    return new PageImpl<>(List.of());
+                });
+
+        productService.getALl(null, pageable);
+    }
+
 
     @Test
     void getBySlug_ShouldReturnProduct(){
@@ -190,5 +398,66 @@ class ProductServiceTest {
 
         assertEquals("Laptop",response.getName());
 
+    }
+
+
+    @Test
+    void getBySlug_shouldThrow_ResorceNotFound(){
+        when((productRepository.findBySlugAndActiveTrue("laptop")))
+                .thenReturn(Optional.empty());
+
+        ResourceNotFoundException exception =
+                assertThrows(ResourceNotFoundException.class,
+                        ()-> productService.getBySlug("laptop"));
+
+        assertEquals("Product not found",exception.getMessage());
+
+        verify(productRepository).findBySlugAndActiveTrue("laptop");
+
+    }
+
+//    @Test
+//    void generateUniqueSlug_shouldReturnBaseSlug_whenSlugDoesNotExist() throws Exception {
+//
+//        when(productRepository.existsBySlug("laptop"))
+//                .thenReturn(false);
+//
+//        Method method = ProductService.class
+//                .getDeclaredMethod("generateUniqueSlug", String.class);
+//        String result = (String) method.invoke(productService,"laptop");
+//        method.setAccessible(true);
+//        assertEquals("laptop",result);
+//        verify(productRepository).existsBySlug("laptop");
+//    }
+
+    @Test
+    void changeStatus_shouldUpgradeProductSuccessfully(){
+        when(productRepository.findById(1L))
+                .thenReturn(Optional.of(product));
+
+        productService.changeStatus(1L,ProductStatus.ACTIVE,"admin@test.com");
+        assertEquals(ProductStatus.ACTIVE,product.getStatus());
+        assertEquals("admin@test.com",product.getUpdatedBy());
+        assertNotNull(product.getUpdatedAt());
+
+        verify(productRepository).findById(1L);
+        verify(productRepository).save(product);
+    }
+
+
+    @Test
+    void changeStatus_shouldThrowException_whenProductNotFound(){
+        when(productRepository.findById(1L))
+                .thenReturn(Optional.empty());
+        ResourceNotFoundException exception =
+                assertThrows(ResourceNotFoundException.class,
+                        ()-> productService.changeStatus(
+                                1L,
+                                ProductStatus.ACTIVE,
+                                "admin@test.com"
+                        ));
+        assertEquals("Product not found",exception.getMessage());
+        verify(productRepository).findById(1L);
+        verify(productRepository,never()).save(any());
     }
 }

@@ -43,3 +43,8 @@ eureka:
 
   instance:
     prefer-ip-address: true
+
+app:
+  admin:
+    email: admin@ecommerce.com
+    password: Admin@123

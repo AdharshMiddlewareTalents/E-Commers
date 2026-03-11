@@ -5,6 +5,7 @@ package com.ecommers.product_service.security;
 import io.jsonwebtoken.Claims;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
+import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
@@ -17,6 +18,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -28,50 +30,72 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtUtil jwtUtil;
 
+
+
     @Override
     protected void doFilterInternal(HttpServletRequest request,
                                     HttpServletResponse response,
                                     FilterChain filterChain)
             throws ServletException, IOException {
 
-        String authHeader = request.getHeader(HttpHeaders.AUTHORIZATION);
+        String token = getTokenFromCookies(request);
 
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            filterChain.doFilter(request, response);
-            return;
-        }
 
-        String token = authHeader.substring(7);
 
-        try {
+        if (token != null) {
 
-            Claims claims = jwtUtil.validateToken(token);
+            try {
 
-            String email = claims.getSubject();
+                Claims claims = jwtUtil.validateToken(token);
 
-            List<Map<String, String>> roles =
-                    claims.get("roles", List.class);
+                String email = claims.getSubject();
 
-            List<SimpleGrantedAuthority> authorities =
-                    roles.stream()
-                            .map(map -> new SimpleGrantedAuthority(
-                                    map.get("authority")))
+                Object rolesClaim = claims.get("roles");
+
+                List<SimpleGrantedAuthority> authorities = Collections.emptyList();
+
+                if (rolesClaim instanceof List<?>) {
+
+                    authorities = ((List<?>) rolesClaim).stream()
+                            .map(role -> {
+                                if (role instanceof Map) {
+                                    return new SimpleGrantedAuthority((String) ((Map<?, ?>) role).get("authority"));
+                                } else {
+                                    return new SimpleGrantedAuthority(role.toString());
+                                }
+                            })
                             .collect(Collectors.toList());
+                }
 
-            UsernamePasswordAuthenticationToken authentication =
-                    new UsernamePasswordAuthenticationToken(
-                            email,
-                            null,
-                            authorities
-                    );
+                UsernamePasswordAuthenticationToken auth =
+                        new UsernamePasswordAuthenticationToken(
+                                email,
+                                null,
+                                authorities
+                        );
 
-            SecurityContextHolder.getContext()
-                    .setAuthentication(authentication);
+                SecurityContextHolder.getContext().setAuthentication(auth);
 
-        } catch (Exception e) {
-            log.error("JWT validation failed: {}", e.getMessage());
+            } catch (Exception e) {
+                log.error("Invalid JWT Token", e);
+            }
         }
 
         filterChain.doFilter(request, response);
+    }
+
+    private String getTokenFromCookies(HttpServletRequest request) {
+
+        if (request.getCookies() == null) {
+            return null;
+        }
+
+        for (Cookie cookie : request.getCookies()) {
+            if ("accessToken".equals(cookie.getName())) {
+                return cookie.getValue();
+            }
+        }
+
+        return null;
     }
 }
