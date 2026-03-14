@@ -22,6 +22,8 @@ public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtFilter;
 
+    private final RateLimiterFilter rateLimiterFilter;
+
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
@@ -34,6 +36,8 @@ public class SecurityConfig {
                                                   "/auth/verify-otp",
                                                   "/auth/resend-otp").permitAll()
                         .anyRequest().authenticated())
+
+                .addFilterBefore(rateLimiterFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class)
                 .build();
     }
