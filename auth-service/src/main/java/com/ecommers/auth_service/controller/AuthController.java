@@ -1,6 +1,7 @@
 package com.ecommers.auth_service.controller;
 
 import com.ecommers.auth_service.dto.*;
+import com.ecommers.auth_service.dto.request.ForgotPasswordRequest;
 import com.ecommers.auth_service.service.AuthService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -96,8 +97,8 @@ public class AuthController {
 
 
     @PostMapping("/forgot-password")
-    public ResponseEntity<String> forgotPassword(@RequestBody String email){
-        return ResponseEntity.ok(authService.forgotPassword(email));
+    public ResponseEntity<String> forgotPassword(@RequestBody ForgotPasswordRequest request){
+        return ResponseEntity.ok(authService.forgotPassword(request.getEmail()));
     }
 
     // ================= VERIFY-RESET-OTP =================

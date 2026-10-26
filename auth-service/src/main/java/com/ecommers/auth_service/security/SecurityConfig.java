@@ -34,7 +34,9 @@ public class SecurityConfig {
                         .requestMatchers("/auth/login",
                                                   "/auth/refresh",
                                                   "/auth/verify-otp",
-                                                  "/auth/resend-otp").permitAll()
+                                                  "/auth/resend-otp",
+                                "/auth/reset-password",
+                                "/auth/forgot-password").permitAll()
                         .anyRequest().authenticated())
 
                 .addFilterBefore(rateLimiterFilter, UsernamePasswordAuthenticationFilter.class)

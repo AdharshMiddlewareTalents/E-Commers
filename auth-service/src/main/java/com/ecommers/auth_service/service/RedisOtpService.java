@@ -41,6 +41,8 @@ public class RedisOtpService {
 
     public void checkResendThrottle(String email){
 
+        log.info("Checking resend throttle");
+
         String key = "otp:resend:" +email.trim().toLowerCase();
 
         if (Boolean.TRUE.equals(redisTemplate.hasKey(key))){

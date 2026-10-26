@@ -242,7 +242,7 @@ public class ProductController {
             @ApiResponse(responseCode = "409", description = "Insufficient stock"),
             @ApiResponse(responseCode = "500", description = "Internal server error")
     })
-    @PreAuthorize("hasRole('INTERNAL_SERVICE')")
+    @PreAuthorize("hasRole('ADMIN')")
     @PatchMapping("/{id}/reduce-stock")
     public ResponseEntity<String> reduceStock(
             @Parameter(description = "Product ID", example = "1")
@@ -254,6 +254,26 @@ public class ProductController {
         service.reduceStock(id, quantity);
 
         return ResponseEntity.ok("Stock reduced successfully");
+    }
+
+
+    @PreAuthorize("hasRole('ADMIN')")
+    @PatchMapping("/{id}/increase-stock")
+    public ResponseEntity<String> increaseStock(
+            @PathVariable Long id,
+            @RequestParam int quantity
+    ) {
+
+        String email = SecurityContextHolder
+                .getContext()
+                .getAuthentication()
+                .getName();
+
+        service.increaseStock(id, quantity, email);
+
+        return ResponseEntity.ok(
+                "Stock increased successfully"
+        );
     }
 
 

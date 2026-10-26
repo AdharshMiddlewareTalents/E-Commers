@@ -33,7 +33,7 @@ spring:
 jwt:
   access-secret: C7K4w+RBnJfIr1TZgb/JUWMiASrTq4cIWxkpExNtwxFYIfENDMUOY+RxRZKe4P8Yv7ky6+98bZYP1k6ot5lr5A==
   refresh-secret: +m8gp15l+BSkSjiPHI6qmccMlbtr3QgqeuttxY4nA0e4g122H3FKWwgd2glkNqO1vkfcKkU8qNiLfwjVn/twIw==
-  access-expiration: 900000      # 15 minutes
+  access-expiration: 900000000     # 15 minutes
   refresh-expiration: 604800000  # 7 days
 
 eureka:

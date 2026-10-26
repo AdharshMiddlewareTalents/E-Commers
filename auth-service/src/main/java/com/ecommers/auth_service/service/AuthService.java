@@ -379,11 +379,20 @@ public class AuthService {
 
         redisOtpService.checkResendThrottle(email);
 
+        log.info("generating otp...");
+
         String otp = otpUtil.generateOtp();
 
-        redisOtpService.saveOtp("reset: "+ email, otp);
+        log.info("otp generated  saving in redis...");
+
+        redisOtpService.saveOtp("reset:"+ email, otp);
+
+        log.info("Sending email");
 
         emailService.sendOtp(email,otp);
+
+        log.info("mail sent successfully");
+
 
         return "Password reset OTP set to your email";
     }
@@ -408,28 +417,77 @@ public class AuthService {
 
     }
 
-    public String resetPassword(ResetPasswordRequest request){
-        log.info("Reset password request for email: {}", request.getEmail());
-        String storedOtp = redisOtpService.getOtp("reset:"+ request.getEmail());
+    public String resetPassword(ResetPasswordRequest request) {
 
-        if(storedOtp == null){
+        String email = request.getEmail().trim().toLowerCase();
+        String redisKey = "reset:" + email;
+
+        log.info("========== RESET PASSWORD REQUEST START ==========");
+        log.info("Reset password request received for email: {}", email);
+
+        log.info("Fetching reset OTP from Redis with key: {}", redisKey);
+
+        String storedOtp = redisOtpService.getOtp(redisKey);
+
+        log.info("Redis OTP fetch completed for email: {}", email);
+
+        if (storedOtp == null) {
+            log.warn("Reset password failed - OTP expired or not found for email: {}", email);
+            log.info("========== RESET PASSWORD REQUEST FAILED ==========");
+
             throw new OtpException("OTP expired");
         }
 
-        if(!storedOtp.equals(request.getOtp())){
+        log.info("Stored OTP found in Redis for email: {}", email);
+
+        log.info("Validating provided OTP for email: {}", email);
+
+        if (!storedOtp.equals(request.getOtp())) {
+            log.warn("Reset password failed - Invalid OTP for email: {}", email);
+            log.info("========== RESET PASSWORD REQUEST FAILED ==========");
+
             throw new OtpException("Invalid OTP");
         }
 
-        User user = userRepository.findByEmail(request.getEmail())
-                .orElseThrow(()-> new ResourceNotFoundException("User not found"));
+        log.info("OTP validation successful for email: {}", email);
 
-        user.setPassword(passwordEncoder.encode(request.getNewPassword()));
+        log.info("Fetching user from database for email: {}", email);
+
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> {
+                    log.error("Reset password failed - User not found for email: {}", email);
+                    return new ResourceNotFoundException("User not found");
+                });
+
+        log.info(
+                "User found successfully. User ID: {}, Email: {}",
+                user.getId(),
+                user.getEmail()
+        );
+
+        log.info("Encoding new password for email: {}", email);
+
+        String encodedPassword =
+                passwordEncoder.encode(request.getNewPassword());
+
+        log.info("New password encoded successfully for email: {}", email);
+
+        user.setPassword(encodedPassword);
+
+        log.info("Saving new password to database for email: {}", email);
 
         userRepository.save(user);
 
-        redisOtpService.deleteOtp("reset:"+request.getEmail());
+        log.info("Password updated successfully in database for email: {}", email);
 
-        log.info("Password reset successfully for {}",request.getEmail());
+        log.info("Deleting reset OTP from Redis with key: {}", redisKey);
+
+        redisOtpService.deleteOtp(redisKey);
+
+        log.info("Reset OTP deleted successfully from Redis for email: {}", email);
+
+        log.info("Password reset completed successfully for email: {}", email);
+        log.info("========== RESET PASSWORD REQUEST END ==========");
 
         return "Password updated successfully";
     }

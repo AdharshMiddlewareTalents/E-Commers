@@ -2,20 +2,22 @@ package com.ecommers.product_service.security;
 
 import io.jsonwebtoken.Claims;
 import jakarta.servlet.FilterChain;
+import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import jakarta.ws.rs.core.HttpHeaders;
+
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-import org.junit.jupiter.api.BeforeEach;
+
 import java.util.List;
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
 
 class JwtAuthenticationFilterTest {
 
@@ -44,25 +46,28 @@ class JwtAuthenticationFilterTest {
     }
 
     @Test
-    void shouldContinueFilterWhenNoAuthorizationHeader() throws Exception {
+    void shouldContinueFilterWhenNoCookiesPresent() throws Exception {
 
-        when(request.getHeader(HttpHeaders.AUTHORIZATION)).thenReturn(null);
+        when(request.getCookies()).thenReturn(null);
 
         filter.doFilterInternal(request, response, filterChain);
 
         verify(filterChain).doFilter(request, response);
+
         assertNull(SecurityContextHolder.getContext().getAuthentication());
     }
 
     @Test
-    void shouldContinueFilterWhenHeaderNotBearer() throws Exception {
+    void shouldContinueFilterWhenCookieNotAccessToken() throws Exception {
 
-        when(request.getHeader(HttpHeaders.AUTHORIZATION))
-                .thenReturn("Basic token");
+        Cookie cookie = new Cookie("sessionId", "123");
+
+        when(request.getCookies()).thenReturn(new Cookie[]{cookie});
 
         filter.doFilterInternal(request, response, filterChain);
 
         verify(filterChain).doFilter(request, response);
+
         assertNull(SecurityContextHolder.getContext().getAuthentication());
     }
 
@@ -71,26 +76,50 @@ class JwtAuthenticationFilterTest {
 
         String token = "validToken";
 
-        when(request.getHeader(HttpHeaders.AUTHORIZATION))
-                .thenReturn("Bearer " + token);
+        Cookie cookie = new Cookie("accessToken", token);
 
+        when(request.getCookies()).thenReturn(new Cookie[]{cookie});
         when(jwtUtil.validateToken(token)).thenReturn(claims);
         when(claims.getSubject()).thenReturn("test@email.com");
 
         List<Map<String, String>> roles =
                 List.of(Map.of("authority", "ROLE_ADMIN"));
 
-        when(claims.get("roles", List.class)).thenReturn(roles);
+        when(claims.get("roles")).thenReturn(roles);
 
         filter.doFilterInternal(request, response, filterChain);
 
-        assertNotNull(SecurityContextHolder.getContext().getAuthentication());
-        assertEquals(
-                "test@email.com",
-                SecurityContextHolder.getContext()
-                        .getAuthentication()
-                        .getPrincipal()
-        );
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+
+        assertNotNull(auth);
+        assertEquals("test@email.com", auth.getPrincipal());
+        assertEquals(1, auth.getAuthorities().size());
+
+        verify(filterChain).doFilter(request, response);
+    }
+
+    @Test
+    void shouldAuthenticateWhenRolesAreStrings() throws Exception {
+
+        String token = "validToken";
+
+        Cookie cookie = new Cookie("accessToken", token);
+
+        when(request.getCookies()).thenReturn(new Cookie[]{cookie});
+        when(jwtUtil.validateToken(token)).thenReturn(claims);
+        when(claims.getSubject()).thenReturn("user@test.com");
+
+        List<String> roles = List.of("ROLE_USER");
+
+        when(claims.get("roles")).thenReturn(roles);
+
+        filter.doFilterInternal(request, response, filterChain);
+
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+
+        assertNotNull(auth);
+        assertEquals("user@test.com", auth.getPrincipal());
+        assertEquals(1, auth.getAuthorities().size());
 
         verify(filterChain).doFilter(request, response);
     }
@@ -100,8 +129,9 @@ class JwtAuthenticationFilterTest {
 
         String token = "invalidToken";
 
-        when(request.getHeader(HttpHeaders.AUTHORIZATION))
-                .thenReturn("Bearer " + token);
+        Cookie cookie = new Cookie("accessToken", token);
+
+        when(request.getCookies()).thenReturn(new Cookie[]{cookie});
 
         when(jwtUtil.validateToken(token))
                 .thenThrow(new RuntimeException("Invalid token"));
@@ -109,6 +139,19 @@ class JwtAuthenticationFilterTest {
         filter.doFilterInternal(request, response, filterChain);
 
         verify(filterChain).doFilter(request, response);
+
+        assertNull(SecurityContextHolder.getContext().getAuthentication());
+    }
+
+    @Test
+    void shouldContinueFilterWhenCookieArrayEmpty() throws Exception {
+
+        when(request.getCookies()).thenReturn(new Cookie[]{});
+
+        filter.doFilterInternal(request, response, filterChain);
+
+        verify(filterChain).doFilter(request, response);
+
         assertNull(SecurityContextHolder.getContext().getAuthentication());
     }
 }

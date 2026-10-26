@@ -1,0 +1,61 @@
+
+server:
+  port: 8083
+
+spring:
+  application:
+    name: order-service
+
+  datasource:
+    url: jdbc:mysql://localhost:3306/ecommers_order_db
+    username: root
+    password: tiger
+
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+
+  cloud:
+    openfeign:
+      httpclient:
+        hc5:
+          enabled: true
+        okhttp:
+          enabled: false
+
+product-service:
+  url: http://localhost:8082
+
+jwt:
+  access-secret: C7K4w+RBnJfIr1TZgb/JUWMiASrTq4cIWxkpExNtwxFYIfENDMUOY+RxRZKe4P8Yv7ky6+98bZYP1k6ot5lr5A==
+  service-secret : 6rokqpIyIISsWhlplgRCGELWJO18xFmagUF0Oj6XeKc=
+
+eureka:
+  instance:
+    prefer-ip-address: true
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+orders:
+  cancellation:
+    timeout-minutes: 15
+    scan-interval-ms: 60000
+
+
+logging:
+  level:
+    root: INFO
+    com.ecommers.order_service: INFO
