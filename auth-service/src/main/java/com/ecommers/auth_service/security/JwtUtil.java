@@ -71,4 +71,17 @@ public class JwtUtil {
                 .getBody()
                 .getSubject();
     }
+
+    public String extractUsernameFromAccess(String token) {
+
+        return Jwts.parserBuilder()
+                .setSigningKey(
+                        Keys.hmacShaKeyFor(accessSecret.getBytes(StandardCharsets.UTF_8))
+                )
+                .build()
+                .parseClaimsJws(token)
+                .getBody()
+                .getSubject();
+    }
+
 }

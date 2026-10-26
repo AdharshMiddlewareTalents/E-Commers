@@ -5,6 +5,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
@@ -37,12 +38,40 @@ public class GlobalExceptionHandler {
         return buildResponse(ex, HttpStatus.FORBIDDEN, request);
     }
 
+    @ExceptionHandler(DublicateResourceException.class)
+    public ResponseEntity<ErrorResponse> handleDublicate(
+            DublicateResourceException ex,
+            HttpServletRequest request
+    ){
+        return  buildResponse(ex,HttpStatus.CONFLICT,request);
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleGenericException(
             Exception ex,
             HttpServletRequest request
     ) {
         return buildResponse(ex, HttpStatus.INTERNAL_SERVER_ERROR, request);
+    }
+
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<ErrorResponse> handleValidationException(
+            MethodArgumentNotValidException ex,
+            HttpServletRequest request
+    ) {
+
+        String message = ex.getBindingResult()
+                .getFieldErrors()
+                .stream()
+                .map(error -> error.getField() + ": " + error.getDefaultMessage())
+                .findFirst()
+                .orElse("Validation failed");
+
+        return buildResponse(
+                new Exception(message),
+                HttpStatus.BAD_REQUEST,
+                request
+        );
     }
 
 

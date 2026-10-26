@@ -1,6 +1,7 @@
 package com.ecommers.product_service.service;
 
 import com.ecommers.product_service.Exception.BadRequestException;
+import com.ecommers.product_service.Exception.DublicateResourceException;
 import com.ecommers.product_service.Exception.ResourceNotFoundException;
 import com.ecommers.product_service.dto.CreateProductRequest;
 import com.ecommers.product_service.dto.ProductResponse;
@@ -58,10 +59,16 @@ public class ProductService {
 
         String slug = generateUniqueSlug(request.getName());
 
+        String name = request.getName();
+
         log.info("Generated slug:{}",slug);
 
+        if (productRepository.findByName(name).isPresent()){
+            throw new DublicateResourceException("Product Name alredy Exists");
+        }
+
         if(productRepository.findBySlugAndActiveTrue(slug).isPresent()){
-            throw new ResourceNotFoundException("Product already exists");
+            throw new DublicateResourceException("Product already exists");
         }
 
         log.info("Setting product status: {}", ProductStatus.ACTIVE);
@@ -163,7 +170,7 @@ public class ProductService {
     @Cacheable(key = "#id")
     public ProductResponse getProudutById(Long id){
 
-        Product product = productRepository.findById(id)
+        Product product = productRepository.findByIdAndActiveTrue(id)
                 .orElseThrow(()->
                         new ResourceNotFoundException("Product not found"));
 
@@ -187,6 +194,9 @@ public class ProductService {
         Product product = productRepository.findById(id)
                 .orElseThrow(()->
                         new ResourceNotFoundException("Product not found"));
+        if(status == ProductStatus.ACTIVE){
+            product.setActive(true);
+        }
         product.setStatus(status);
         product.setUpdatedBy(userEmail);
         product.setUpdatedAt(LocalDateTime.now());
@@ -211,56 +221,160 @@ public class ProductService {
 
     }
 
+    @Transactional
+    @CacheEvict(allEntries = true)
+    public void reserveStock(Long id, int quantity) {
+
+        if (quantity <= 0) {
+            throw new BadRequestException(
+                    "Reservation quantity must be greater than zero"
+            );
+        }
+
+        int updated = productRepository.reserveStock(id, quantity);
+
+        if (updated == 1) {
+            log.info(
+                    "Stock reserved for productId={}, quantity={}",
+                    id,
+                    quantity
+            );
+            return;
+        }
+
+        Product product = productRepository.findById(id)
+                .orElseThrow(() ->
+                        new ResourceNotFoundException(
+                                "Product not found: " + id
+                        )
+                );
+
+        if (!product.isActive()
+                || product.getStatus() != ProductStatus.ACTIVE) {
+            throw new BadRequestException(
+                    "Product is not available for purchase"
+            );
+        }
+
+        throw new BadRequestException(
+                "Insufficient stock for product: " + id
+        );
+    }
+
 
     @Transactional
-    @CacheEvict(key = "#id")
-    public void reduceStock(Long id, int quantity ){
+    @CacheEvict(allEntries = true)
+    public void reduceStock(Long id, int quantity) {
+
+        if (quantity <= 0) {
+            throw new BadRequestException(
+                    "Quantity must be greater than zero"
+            );
+        }
+
+        int updated = productRepository.reserveStock(id, quantity);
+
+        if (updated == 1) {
+            log.info(
+                    "Stock reserved for product id={}, quantity={}",
+                    id, quantity
+            );
+            return;
+        }
+
         Product product = productRepository.findById(id)
-                .orElseThrow(()->
-                        new ResourceNotFoundException("product not found"));
-        if (product.getStock()<quantity){
-            throw new BadRequestException("insufficient stock");
+                .orElseThrow(() ->
+                        new ResourceNotFoundException("Product not found")
+                );
+
+        if (!product.isActive()
+                || product.getStatus() != ProductStatus.ACTIVE) {
+            throw new BadRequestException(
+                    "Product is not available for purchase"
+            );
         }
 
-        product.setStock(product.getStock() - quantity);
+        throw new BadRequestException("Insufficient stock");
+    }
 
-        if (product.getStock() == 0){
-            product.setStatus(ProductStatus.OUT_OF_STOCK);
+    @Transactional
+    @CacheEvict(allEntries = true)
+    public void releaseStock(Long id, int quantity) {
+
+        if (quantity <= 0) {
+            throw new BadRequestException(
+                    "Release quantity must be greater than zero"
+            );
         }
 
-        productRepository.save(product);
+        int updated = productRepository.releaseStock(id, quantity);
+
+        if (updated == 1) {
+            return;
+        }
+
+        throw new ResourceNotFoundException(
+                "Product not found or inactive: " + id
+        );
     }
 
 
-    private String saveImage(MultipartFile file)
-            throws IOException {
+    @Transactional
+    @CacheEvict(cacheNames = "products", allEntries = true)
+    public void releaseReservedStock(Long id, int quantity) {
 
-        if (file == null || file.isEmpty()) return null;
-
-        File directory = new File(uploadDir);
-        if (!directory.exists()) directory.mkdirs();
-
-        String fileName =
-                UUID.randomUUID() + ".png";
-
-        Path path = Paths.get(uploadDir + fileName);
-        Files.write(path, file.getBytes());
-
-        return "/images/" + fileName;
-    }
-
-    private void validateImage(MultipartFile file){
-
-        if(file == null || file.isEmpty()) return;
-
-        if(!file.getContentType().startsWith("image/")){
-            throw new BadRequestException("Inavlide file type");
+        if (quantity <= 0) {
+            throw new BadRequestException(
+                    "Quantity must be greater than zero"
+            );
         }
 
-        if(file.getSize()>5*1024*1024){
-            throw new BadRequestException("File is to large");
+        int updated = productRepository.releaseStock(id, quantity);
+
+        if (updated != 1) {
+            throw new ResourceNotFoundException("Product not found");
         }
+
+        log.info(
+                "Reserved stock released for product id={}, quantity={}",
+                id, quantity
+        );
     }
+
+
+
+//    private String saveImage(MultipartFile file)
+//            throws IOException {
+//
+//        if (file == null || file.isEmpty()) return null;
+//
+//        File directory = new File(uploadDir);
+//        if (!directory.exists()) directory.mkdirs();
+//
+//        String fileName =
+//                UUID.randomUUID() + ".png";
+//
+//        Path path = Paths.get(uploadDir + fileName);
+//        Files.write(path, file.getBytes());
+//
+//        return "/images/" + fileName;
+//    }
+//
+//    private void validateImage(MultipartFile file){
+//
+//        if(file == null || file.isEmpty()) return;
+//
+//        if(!file.getContentType().startsWith("image/")){
+//            throw new BadRequestException("Inavlide file type");
+//        }
+//
+//        if(file.getSize()>5*1024*1024){
+//            throw new BadRequestException("File is to large");
+//        }
+//    }
+
+
+
 
     private String generateUniqueSlug(String name) {
 
@@ -277,6 +391,53 @@ public class ProductService {
         }
 
         return slug;
+    }
+
+
+    @Transactional
+    @CacheEvict(cacheNames = "productById",key = "#id")
+    public void increaseStock(Long id, int quantity, String userEmail){
+        log.info(
+                "Increasing stock for product id: {}, quantity: {}",
+                id, quantity
+        );
+
+        if(quantity<=0){
+            throw new BadRequestException("Quantity must be greater than zero");
+        }
+
+        Product product = productRepository.findById(id)
+                .orElseThrow(()-> new ResourceNotFoundException("Product not found"));
+
+        int oldStock = product.getStock();
+
+        product.setStock(oldStock + quantity);
+
+        log.info(
+                "Product id: {}, stock changed from {} to {}",
+                id,
+                oldStock,
+                product.getStock()
+        );
+
+        if(product.getStatus() == ProductStatus.OUT_OF_STOCK){
+
+            product.setStatus(ProductStatus.ACTIVE);
+
+            log.info(
+                    "Product id: {} status changed from OUT_OF_STOCK to ACTIVE",
+                    id
+            );
+        }
+
+        product.setUpdatedBy(userEmail);
+        product.setUpdatedAt(LocalDateTime.now());
+        productRepository.save(product);
+        log.info(
+                "Stock increased successfully for product id: {}",
+                id
+        );
+
     }
 
 

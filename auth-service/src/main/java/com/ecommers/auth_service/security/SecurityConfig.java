@@ -22,9 +22,11 @@ public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtFilter;
 
+    private final RateLimiterFilter rateLimiterFilter;
+
 
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http){
+    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         return http
                 .csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(auth-> auth
@@ -32,8 +34,12 @@ public class SecurityConfig {
                         .requestMatchers("/auth/login",
                                                   "/auth/refresh",
                                                   "/auth/verify-otp",
-                                                  "/auth/resend-otp").permitAll()
+                                                  "/auth/resend-otp",
+                                "/auth/reset-password",
+                                "/auth/forgot-password").permitAll()
                         .anyRequest().authenticated())
+
+                .addFilterBefore(rateLimiterFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class)
                 .build();
     }
